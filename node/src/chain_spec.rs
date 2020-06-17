@@ -288,7 +288,8 @@ fn testnet_genesis(
         poa: Some(PoAModuleConfig {
             current_validators: initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
             current_validator_count: initial_authorities.len() as u8,
-            next_session_change_at: session_len
+            next_session_change_at: session_len,
+            force_session_change: false,
         }),
         balances: Some(BalancesConfig {
             balances: endowed_accounts
