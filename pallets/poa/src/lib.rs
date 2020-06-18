@@ -25,9 +25,6 @@ decl_storage! {
 	trait Store for Module<T: Trait> as PoAModule {
 		CurrentValidators get(fn current_validators) config(): Vec<T::AccountId>;
 
-		// TODO: Remove the count
-		CurrentValidatorCount get(fn current_validator_count) config(): u8;
-
 		//NextSessionChangeAt get(fn next_session_change_at) config(): u32;
 		NextSessionChangeAt get(fn next_session_change_at) config(): T::BlockNumber;
 
@@ -100,7 +97,7 @@ decl_module! {
                 }
             } else {
                 let mut validators = Self::validators_to_remove();
-                for (i, v) in validators.iter().enumerate() {
+                for v in validators.iter() {
                     if *v == validator_id {
                         fail!(Error::<T>::AlreadyQueuedForAddition)
                     }
@@ -120,14 +117,35 @@ decl_module! {
 		    // TODO: Check the origin is Master
 			ensure_root(origin)?;
 
-            // Remove all occurences of validator_id from queue
+            /*// Remove all occurrences of validator_id from queue
             let mut validator_queue = Self::validators_to_add();
             let count_removed = Self::remove_validator_id(&validator_id, &mut validator_queue);
             if count_removed > 0 {
                 <QueuedValidators<T>>::put(validator_queue);
+            }*/
+
+            let mut already_queued_for_rem = false;
+            let mut validators = Self::validators_to_remove();
+            for v in validators.iter() {
+                if *v == validator_id {
+                    if force {
+                        already_queued_for_rem = true
+                    } else {
+                        fail!(Error::<T>::AlreadyQueuedForRemoval)
+                    }
+                }
+            }
+
+            if !already_queued_for_rem {
+                validators.push(validator_id.clone());
+                <RemoveValidators<T>>::put(validators);
             }
 
             if force {
+                ForceSessionChange::put(true);
+            }
+
+            /*if force {
 
                 // <pallet_session::Module<T>>::rotate_session();
 			    ForceSessionChange::put(true);
@@ -140,7 +158,7 @@ decl_module! {
                 }
                 validators.push(validator_id.clone());
                 <RemoveValidators<T>>::put(validators);
-            }
+            }*/
 			Ok(())
 		}
 	}
@@ -156,8 +174,8 @@ impl<T: Trait> Module<T> {
                 indices.insert(0, i);
             }
         }
-        for i in indices {
-            validators.remove(i);
+        for i in &indices {
+            validators.remove(*i);
         }
         indices.len()
     }
@@ -172,8 +190,8 @@ impl<T: Trait> pallet_session::ShouldEndSession<T::BlockNumber> for Module<T> {
         let current_block_no = <system::Module<T>>::block_number();
         // TODO: Remove once sure the following panic is never triggered
         if current_block_no.saturated_into::<u32>() > Self::next_session_change_at().saturated_into::<u32>() {
-            panic!("Current block number > next_session_change_at");
             print(current_block_no.saturated_into::<u32>())
+            panic!("Current block number > next_session_change_at");
         }
         Self::force_session_change() || (current_block_no == Self::next_session_change_at())
     }
@@ -185,14 +203,26 @@ impl<T: Trait> pallet_session::SessionManager<T::AccountId> for Module<T> {
         // Flag is set to false so that the session doesn't keep rotating.
         //Flag::put(false);
         print("Called new_session");
-        // XXX: This can lead to loops
-        <pallet_session::Module<T>>::rotate_session();
-        <ForceSessionChange<T>>::put(false);
         // Check for error on empty validator set
         let mut current_validators = Self::current_validators();
-        if current_validators.len() == 0 {
+        let mut validators_to_add = Self::validators_to_add();
+        if (current_validators.len() + validators_to_add.len()) == 0 {
             None
         } else {
+            // The size of the 3 vectors is ~15 so multiple iterations are ok.
+            // If they were bigger, `validators_to_remove` should be turned into a set and then
+            // iterate over `validators_to_add` and `current_validators` only once removing any id
+            // present in the set.
+            let mut validators_to_remove = <RemoveValidators<T>>::take();
+            for v in validators_to_remove {
+                Self::remove_validator_id(&v, &mut validators_to_add);
+                Self::remove_validator_id(&v, &mut current_validators);
+            }
+            let max_validators = T::MaxActiveValidators::get() as usize;
+            while (current_validators.len() < max_validators) && (validators_to_add.len() > 0) {
+                current_validators.push(validators_to_add.remove(0));
+            }
+
             let current_block_no = <system::Module<T>>::block_number().saturated_into::<u32>();
             let min_session_len = T::MinSessionLength::get();
             let rem = min_session_len % current_validators.len() as u32;
@@ -204,6 +234,10 @@ impl<T: Trait> pallet_session::SessionManager<T::AccountId> for Module<T> {
             let next_session_at = current_block_no + session_len;
             print(next_session_at);
             <NextSessionChangeAt<T>>::put(T::BlockNumber::from(next_session_at));
+            <QueuedValidators<T>>::put(validators_to_add);
+            <CurrentValidators<T>>::put(current_validators.clone());
+            ForceSessionChange::put(false);
+            <pallet_session::Module<T>>::rotate_session();
             // let current_block_no = <system::Module<T>>::block_number();
             // print("next_session_change_at");
             // print(Self::next_session_change_at());
