@@ -21,7 +21,7 @@ fn session_keys(
 }
 
 // THIS MUST BE SAME AS WHATS DEFINED IN runtime/lib.rs
-const MinSessionLength: u32 = 3;
+const MinSessionLength: u32 = 5;
 
 type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
@@ -287,7 +287,7 @@ fn testnet_genesis(
         }),
         poa: Some(PoAModuleConfig {
             current_validators: initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
-            next_session_change_at: session_len,
+            next_session_change_at: session_len + 1,    // +1 as first block is genesis and not produced by anyone
             force_session_change: false,
         }),
         balances: Some(BalancesConfig {
