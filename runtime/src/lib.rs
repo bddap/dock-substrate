@@ -23,6 +23,7 @@ pub mod revoke;
 mod benchmarking;
 
 pub use poa;
+// pub use accounting;
 
 #[cfg(test)]
 mod test_common;
@@ -340,6 +341,10 @@ impl pallet_authorship::Trait for Runtime {
     type EventHandler = ();
 }
 
+/*impl accounting::Trait for Runtime {
+    type Event = Event;
+}*/
+
 construct_runtime!(
     pub enum Runtime where
         Block = Block,
@@ -351,7 +356,7 @@ construct_runtime!(
         Timestamp: timestamp::{Module, Call, Storage, Inherent},
         Session: pallet_session::{Module, Call, Storage, Event, Config<T>},
 		PoAModule: poa::{Module, Call, Storage, Event<T>, Config<T>},
-        Aura: aura::{Module, Config<T>, Inherent(Timestamp)},
+		Aura: aura::{Module, Config<T>, Inherent(Timestamp)},
         Grandpa: grandpa::{Module, Call, Storage, Config, Event},
         Balances: balances::{Module, Call, Storage, Config<T>, Event<T>},
         Authorship: pallet_authorship::{Module, Call, Storage},

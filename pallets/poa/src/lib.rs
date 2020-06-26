@@ -35,8 +35,9 @@ decl_storage! {
         /// slot of the current epoch
 		EpochEndsAt get(fn epoch_ends_at): u64;
 
+        // TODO: Remove this item. Change behavior to keep epoch size a multiple of number of validators
         /// Boolean flag to force session change. This will disregard block number in EpochEndsAt
-        ForceSessionChange get(fn force_session_change) config(): bool;
+        ForceSessionChange get(fn force_session_change): bool;
 
         /// Queue of validators to become part of the active validators. Validators can be added either
         /// to the back of the queue or front by passing a flag in the add method.
@@ -52,7 +53,17 @@ decl_storage! {
 
         /// Set when a hot swap is to be performed, replacing validator id as 1st element of tuple
         /// with the 2nd one.
-		HotSwap get(fn hot_swap): Option<(T::AccountId, T::AccountId)>
+		HotSwap get(fn hot_swap): Option<(T::AccountId, T::AccountId)>;
+
+		/*/// Current epochs
+        Epoch get(fn epoch): u64;*/
+
+        /// For each epoch, validator count, starting slot, ending slot
+        Epochs get(fn get_epoch): map hasher(identity) u32 => (u8, u64, Option<u64>);
+
+        /// Block produced by each validator per epoch
+        EpochBlockCounts get(fn get_block_count_for_validator):
+            double_map hasher(identity) u64, hasher(opaque_blake2_256) T::AccountId => u64;
 	}
 }
 
@@ -67,6 +78,8 @@ decl_event!(
 
 		// Validator removed.
 		ValidatorRemoved(AccountId),
+
+		EpochBegins(u64),
 	}
 );
 
@@ -90,13 +103,8 @@ decl_module! {
 	    // Do maximum of the work in functions to `add_validator` or `remove_validator` and minimize the work in
 	    // `should_end_session` since that it called more frequently.
 
-		// Initializing errors
-		// this includes information about your errors in the node's metadata.
-		// it is needed only if you are using errors in your pallet
 		type Error = Error<T>;
 
-		// Initializing events
-		// this is needed only if you are using events in your pallet
 		fn deposit_event() = default;
 
         /// Add a new validator to active validator set unless already a validator and the total number
@@ -441,11 +449,43 @@ impl<T: Trait> pallet_session::SessionManager<T::AccountId> for Module<T> {
     // SessionIndex is u32 but comes from sp_staking pallet. Since staking is not needed for now, not
     // importing the pallet.
 
-    fn new_session(_: u32) -> Option<Vec<T::AccountId>> {
+    fn new_session(session_idx: u32) -> Option<Vec<T::AccountId>> {
         print("Called new_session");
         let validators = Self::active_validators();
         // Check for error on empty validator set. On returning None, it loads validator set from genesis
-        if validators.len() == 0 { None } else { Some(validators) }
+        if validators.len() == 0 {
+            // Epoch::put(1);
+            None
+        } else {
+            // let current_epoch_no = Epoch::get();
+            // Epoch::put(current_epoch_no + 1);
+            // print("Current epoch no");
+            // print(current_epoch_no);
+            print("Current session index");
+            print(session_idx);
+
+            // This slot number should always be available here. If its not then panic.
+            let current_slot_no = Self::current_slot_no().unwrap();
+
+            let current_epoch_no = session_idx - 1;
+            Epochs::insert(current_epoch_no, (validators.len() as u8, current_slot_no+1, None as Option<u64>));
+
+            if session_idx == 2 {
+                // First working session
+            } else {
+                let prev_epoch = session_idx - 2;
+                let (v, start, _) = Epochs::get(&prev_epoch);
+                if v == 0 {
+                    // This get should never fail. But if it does, let it panic
+                    print("Data for previous epoch not found");
+                    print(prev_epoch);
+                    panic!();
+                }
+                Epochs::insert(prev_epoch, (v, start, Some(current_slot_no)))
+            }
+
+            Some(validators)
+        }
     }
 
     fn end_session(_: u32) {}

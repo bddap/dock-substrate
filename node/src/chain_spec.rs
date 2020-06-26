@@ -278,7 +278,6 @@ fn testnet_genesis(
         }),
         poa: Some(PoAModuleConfig {
             active_validators: initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
-            force_session_change: false,
         }),
         balances: Some(BalancesConfig {
             balances: endowed_accounts
