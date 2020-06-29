@@ -1,10 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+//! Utilities to add and remove validators. In order to maintaim fairness among block producers,
+//! additions and removals are queued and take effect only at the beginning of next epoch.
+
 use codec::Decode;
 use frame_support::{
     decl_error, decl_event, decl_module, decl_storage, dispatch, fail,
-    sp_runtime::{print, SaturatedConversion},
-    traits::Get,
+    sp_runtime::SaturatedConversion, traits::Get,
 };
 use frame_system::{self as system, ensure_root};
 use sp_std::prelude::Vec;
@@ -12,13 +14,7 @@ use sp_std::prelude::Vec;
 extern crate alloc;
 use alloc::collections::BTreeSet;
 
-/// Pallet to add and remove validators.
-
-/// The pallet's configuration trait.
 pub trait Trait: system::Trait + pallet_session::Trait {
-    // Add other types and constants required to configure this pallet.
-
-    /// The overarching event type.
     type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 
     /// Epoch length in number of slots
@@ -27,9 +23,7 @@ pub trait Trait: system::Trait + pallet_session::Trait {
     type MaxActiveValidators: Get<u8>;
 }
 
-// This pallet's storage items.
 decl_storage! {
-
     trait Store for Module<T: Trait> as PoAModule {
         /// List of active validators. Maximum allowed are `MaxActiveValidators`
         ActiveValidators get(fn active_validators) config(): Vec<T::AccountId>;
@@ -128,7 +122,6 @@ decl_module! {
                 let mut validators = Self::validators_to_add();
                 // Remove all occurences of validator_id from queue
                 Self::remove_validator_id(&validator_id, &mut validators);
-                print("Adding a new validator at front");
 
                 // The new validator should be in front of the queue so that it definitely
                 // gets added to the active validator set (unless already maximum validators present
@@ -144,7 +137,7 @@ decl_module! {
                         fail!(Error::<T>::AlreadyQueuedForAddition)
                     }
                 }
-                print("Adding a new validator at back");
+
                 // The new validator should be at the back of the queue
                 validators.push(validator_id.clone());
                 <QueuedValidators<T>>::put(validators);
@@ -201,7 +194,6 @@ decl_module! {
             // There should be at least 1 id in potential_new_vals that is not in removals
             let diff: Vec<_> = potential_new_vals.difference(&removals).collect();
             if diff.is_empty() {
-                print("Cannot remove. Need at least 1 active validator");
                 fail!(Error::<T>::NeedAtLeast1Validator)
             }
 
@@ -232,7 +224,6 @@ decl_module! {
             let mut found = false;
             for v in active_validators.iter() {
                 if *v == new_validator_id {
-                    print("New validator to swap in already present");
                     fail!(Error::<T>::SwapInFailed)
                 }
                 if *v == old_validator_id {
@@ -242,7 +233,6 @@ decl_module! {
             }
 
             if !found {
-                print("Validator to swap out not present");
                 fail!(Error::<T>::SwapOutFailed)
             }
 
@@ -327,9 +317,6 @@ impl<T: Trait> Module<T> {
 
             let active_validator_count = active_validators.len() as u8;
             if active_validator_set_changed {
-                print("Active validator set changed, rotating session");
-                print(count_added);
-                print(count_removed);
                 <ActiveValidators<T>>::put(active_validators);
             }
             (active_validator_set_changed, active_validator_count)
@@ -350,8 +337,6 @@ impl<T: Trait> Module<T> {
             min_epoch_len + active_validator_count - rem
         };
         let epoch_ends_at = current_slot_no + epoch_len;
-        print("epoch ends at");
-        print(epoch_ends_at);
         EpochEndsAt::put(epoch_ends_at);
     }
 
@@ -379,17 +364,11 @@ impl<T: Trait> Module<T> {
                 Some(pre_run) => {
                     // Assumes that the 2nd element of tuple is for slot no.
                     let s = u64::decode(&mut &pre_run.1[..]).unwrap();
-                    print("current slot no");
-                    print(s);
                     Some(s)
                 }
-                None => {
-                    // print("Not as_pre_runtime ");
-                    None
-                }
+                None => None,
             }
         } else {
-            // print("No logs");
             None
         }
     }
@@ -398,24 +377,14 @@ impl<T: Trait> Module<T> {
 /// Indicates to the session module if the session should be rotated.
 impl<T: Trait> pallet_session::ShouldEndSession<T::BlockNumber> for Module<T> {
     fn should_end_session(_now: T::BlockNumber) -> bool {
-        print("Called should_end_session");
-
-        // TODO: Next 3 are debugging lines. Remove them.
-        let current_block_no = <system::Module<T>>::block_number().saturated_into::<u32>();
-        print("current_block_no");
-        print(current_block_no.saturated_into::<u32>());
-
         let current_slot_no = match Self::current_slot_no() {
             Some(s) => s,
             None => {
-                print("Cannot fetch slot number");
                 return false;
             }
         };
 
         let epoch_ends_at = Self::epoch_ends_at().saturated_into::<u64>();
-        print("epoch ends at");
-        print(epoch_ends_at);
 
         // Unless the session is being forcefully ended or epoch has had the required number of blocks,
         // or hot swap is triggered, continue the session.
@@ -450,7 +419,6 @@ impl<T: Trait> pallet_session::SessionManager<T::AccountId> for Module<T> {
     // importing the pallet.
 
     fn new_session(_: u32) -> Option<Vec<T::AccountId>> {
-        print("Called new_session");
         let validators = Self::active_validators();
         // Check for error on empty validator set. On returning None, it loads validator set from genesis
         if validators.len() == 0 {
