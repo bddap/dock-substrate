@@ -50,15 +50,6 @@ pub fn get_authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId) {
     )
 }
 
-/// Helper function to generate an account id and authority key for Aura and Grandpa
-pub fn get_poa_authority_keys_from_seed(s: &str) -> (AccountId, AuraId, GrandpaId) {
-    (
-        get_account_id_from_seed::<sr25519::Public>(s),
-        get_from_seed::<AuraId>(s),
-        get_from_seed::<GrandpaId>(s),
-    )
-}
-
 /// Create a public key from an SS58 address
 fn pubkey_from_ss58<T: Public>(ss58: &str) -> T {
     Ss58Codec::from_string(ss58).unwrap()
@@ -293,7 +284,6 @@ fn testnet_genesis(
                 .iter()
                 .map(|x| x.0.clone())
                 .collect::<Vec<_>>(),
-            force_session_change: false,
         }),
         balances: Some(BalancesConfig {
             balances: endowed_accounts

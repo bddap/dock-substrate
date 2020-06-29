@@ -20,6 +20,8 @@ pub trait Trait: system::Trait + pallet_session::Trait {
     /// Epoch length in number of slots
     type MinEpochLength: Get<u64>;
 
+    /// Queued validators will remain queued as long as the number of active validators is at its
+    /// limit.
     type MaxActiveValidators: Get<u8>;
 }
 
@@ -32,12 +34,9 @@ decl_storage! {
         /// slot of the current epoch
         EpochEndsAt get(fn epoch_ends_at): u64;
 
-        /// Boolean flag to force session change. This will disregard block number in EpochEndsAt
-        ForceSessionChange get(fn force_session_change) config(): bool;
-
         /// Queue of validators to become part of the active validators. Validators can be added either
         /// to the back of the queue or front by passing a flag in the add method.
-        /// On epoch end or immediately if forced, validators from the queue are taken out in FIFO order
+        /// On epoch end validators from the queue are taken out in FIFO order
         /// and added to the active validators unless the number of active validators reaches the max allowed.
         QueuedValidators get(fn validators_to_add): Vec<T::AccountId>;
 
@@ -129,7 +128,8 @@ decl_module! {
                 validators.insert(0, validator_id.clone());
                 <QueuedValidators<T>>::put(validators);
                 Self::deposit_event(RawEvent::ValidatorQueuedInFront(validator_id));
-                ForceSessionChange::put(true);
+
+                todo!("set EpochEndsAt to the block after this one");
             } else {
                 let mut validators = Self::validators_to_add();
                 for v in validators.iter() {
@@ -205,7 +205,7 @@ decl_module! {
             }
 
             if remove_now {
-                ForceSessionChange::put(true);
+                todo!("set EpochEndsAt to the block after this one");
             }
             Ok(())
         }
@@ -272,9 +272,6 @@ impl<T: Trait> Module<T> {
 
         // If any validator is to be added or removed
         if (validators_to_remove.len() > 0) || (validators_to_add.len() > 0) {
-            // TODO: Remove debugging variable below
-            let mut count_removed = 0u32;
-
             // Remove the validators from active validator set or the queue.
             // The size of the 3 vectors is ~15 so multiple iterations are ok.
             // If they were bigger, `validators_to_remove` should be turned into a set and then
@@ -284,7 +281,6 @@ impl<T: Trait> Module<T> {
                 let removed_active = Self::remove_validator_id(&v, &mut active_validators);
                 if removed_active > 0 {
                     active_validator_set_changed = true;
-                    count_removed += 1;
                 } else {
                     // The `add_validator` ensures that a validator id cannot be part of both active
                     // validator set and queued validators
@@ -297,23 +293,17 @@ impl<T: Trait> Module<T> {
 
             let max_validators = T::MaxActiveValidators::get() as usize;
 
-            // TODO: Remove debugging variable below
-            let mut count_added = 0u32;
-
             // Make any queued validators active.
             while (active_validators.len() < max_validators) && (validators_to_add.len() > 0) {
                 active_validator_set_changed = true;
                 queued_validator_set_changed = true;
                 active_validators.push(validators_to_add.remove(0));
-                count_added += 1;
             }
 
             // Only write if queued_validator_set_changed
             if queued_validator_set_changed {
                 <QueuedValidators<T>>::put(validators_to_add);
             }
-
-            ForceSessionChange::put(false);
 
             let active_validator_count = active_validators.len() as u8;
             if active_validator_set_changed {
@@ -356,21 +346,12 @@ impl<T: Trait> Module<T> {
     }
 
     fn current_slot_no() -> Option<u64> {
-        let digest = <system::Module<T>>::digest();
-        let logs = digest.logs();
-        if logs.len() > 0 {
-            // Assumes that the first log is for PreRuntime digest
-            match logs[0].as_pre_runtime() {
-                Some(pre_run) => {
-                    // Assumes that the 2nd element of tuple is for slot no.
-                    let s = u64::decode(&mut &pre_run.1[..]).unwrap();
-                    Some(s)
-                }
-                None => None,
-            }
-        } else {
-            None
-        }
+        let digest: frame_support::sp_runtime::Digest<T::Hash> = <system::Module<T>>::digest();
+        let first = digest.logs().first()?;
+        let pre_run = first.as_pre_runtime()?;
+        Some(u64::decode(&mut &pre_run.1[..]).unwrap());
+        // Assumes that the first log is for PreRuntime digest
+        todo!("assert this is true")
     }
 }
 
@@ -386,12 +367,8 @@ impl<T: Trait> pallet_session::ShouldEndSession<T::BlockNumber> for Module<T> {
 
         let epoch_ends_at = Self::epoch_ends_at().saturated_into::<u64>();
 
-        // Unless the session is being forcefully ended or epoch has had the required number of blocks,
-        // or hot swap is triggered, continue the session.
-        // TODO: Reduce reads from 2 to 1 by changing the boolean flag to be integer (u8) for different conditions.
-        let force_session_change = Self::force_session_change();
         let hot_swap = <HotSwap<T>>::take();
-        if force_session_change || (current_slot_no >= epoch_ends_at) || hot_swap.is_some() {
+        if (current_slot_no >= epoch_ends_at) || hot_swap.is_some() {
             let (active_validator_set_changed, active_validator_count) = if hot_swap.is_some() {
                 let (old_validator, new_validator) = hot_swap.unwrap();
                 (true, Self::swap(old_validator, new_validator))
