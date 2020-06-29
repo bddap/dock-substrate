@@ -60,6 +60,12 @@ features = ['derive']
 optional = true
 version = '1.0.101'
 
+[dependencies.pallet-authorship]
+git = 'https://github.com/paritytech/substrate.git'
+default-features = false
+tag = 'v2.0.0-rc3'
+version = '2.0.0-rc3'
+
 [features]
 default = ['std']
 std = [
@@ -69,4 +75,5 @@ std = [
     'sp-std/std',
     'serde',
     'pallet-session/std',
+    'pallet-authorship/std',
 ]
