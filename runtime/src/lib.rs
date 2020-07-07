@@ -31,7 +31,7 @@ mod test_common;
 use codec::{Decode, Encode};
 use frame_support::{
     construct_runtime, parameter_types,
-    traits::{KeyOwnerProofSystem, Randomness, Currency, Imbalance, OnUnbalanced},
+    traits::{KeyOwnerProofSystem, Randomness},
     weights::{
         constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
         IdentityFee, Weight,
@@ -45,7 +45,7 @@ use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, MultiSignature, Perbill, print, SaturatedConversion
+    ApplyExtrinsicResult, MultiSignature, Perbill
 };
 use sp_runtime::traits::{
     BlakeTwo256, Block as BlockT, IdentifyAccount, IdentityLookup, NumberFor, Saturating, Verify,
@@ -149,6 +149,8 @@ parameter_types! {
 }
 
 impl system::Trait for Runtime {
+    /// The basic call filter to use in dispatchable.
+    type BaseCallFilter = ();
     /// The ubiquitous origin type.
     type Origin = Origin;
     /// The aggregated dispatch type that is available for extrinsics.
