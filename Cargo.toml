@@ -2,14 +2,8 @@
 members = [
     'node',
     'pallets/poa',
-#    'pallets/accounting',
     'runtime',
 ]
-
-#[features]
-#runtime-benchmarks = [
-#	"runtime/runtime-benchmarks",
-#]
 
 [profile.release]
 panic = 'unwind'
