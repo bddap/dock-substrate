@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["dock_testnet_runtime"] = [{"text":"impl BuildStorage for <a class=\"struct\" href=\"dock_testnet_runtime/struct.GenesisConfig.html\" title=\"struct dock_testnet_runtime::GenesisConfig\">GenesisConfig</a>","synthetic":false,"types":["dock_testnet_runtime::GenesisConfig"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

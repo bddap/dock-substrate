@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["dock_testnet"] = [{"text":"impl NativeExecutionDispatch for <a class=\"struct\" href=\"dock_testnet/service/struct.Executor.html\" title=\"struct dock_testnet::service::Executor\">Executor</a>","synthetic":false,"types":["dock_testnet::service::Executor"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
